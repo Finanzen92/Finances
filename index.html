@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Zinseszins Pro+</title>
+
+  <!-- 📱 PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#667eea">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      background-attachment: fixed;
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .container {
+      background: white;
+      padding: 18px;
+      border-radius: 18px;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+
+    h1 {
+      text-align: center;
+      margin: 8px 0 16px 0;
+      font-size: 22px;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px;
+      margin: 8px 0;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 10px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .row button {
+      flex: 1;
+      padding: 14px;
+      font-size: 14px;
+    }
+
+    .result {
+      margin-top: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      white-space: pre-line;
+      text-align: center;
+    }
+
+    canvas {
+      margin-top: 14px;
+    }
+
+    /* 🌙 DARK MODE */
+    .dark {
+      background: #121212;
+    }
+
+    .dark .container {
+      background: #1e1e1e;
+      color: white;
+    }
+
+    .dark input {
+      background: #2a2a2a;
+      color: white;
+      border: 1px solid #444;
+    }
+
+    /* 📱 MOBILE */
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+
+      .container {
+        padding: 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <h1>💰 Zinseszins Pro+</h1>
+
+  <input type="number" id="kapital" placeholder="Startkapital (CHF)">
+  <input type="number" id="zins" placeholder="Zinssatz (%)">
+  <input type="number" id="jahre" placeholder="Laufzeit (Jahre)">
+  <input type="number" id="sparrate" placeholder="Monatliche Einzahlung (CHF)">
+  <input type="number" id="inflation" placeholder="Inflation (%) (optional)">
+
+  <button onclick="berechnen()">Berechnen</button>
+
+  <div class="row">
+    <button onclick="toggleDark()">🌙 Darkmode</button>
+    <button onclick="downloadPDF()">📄 PDF</button>
+  </div>
+
+  <div class="result" id="ergebnis"></div>
+
+  <canvas id="chart"></canvas>
+</div>
+
+<script>
+let chart;
+let lastResult = "";
+let lastLabels = [];
+let lastData = [];
+
+function berechnen() {
+  let K0 = parseFloat(document.getElementById("kapital").value);
+  let r = parseFloat(document.getElementById("zins").value) / 100;
+  let years = parseInt(document.getElementById("jahre").value);
+  let monthly = parseFloat(document.getElementById("sparrate").value) || 0;
+  let inflation = parseFloat(document.getElementById("inflation").value) / 100 || 0;
+
+  if (isNaN(K0) || isNaN(r) || isNaN(years)) {
+    document.getElementById("ergebnis").innerText = "Bitte Pflichtfelder ausfüllen";
+    return;
+  }
+
+  let balance = K0;
+  let labels = [];
+  let data = [];
+
+  for (let y = 0; y <= years; y++) {
+    labels.push("Jahr " + y);
+    data.push(balance.toFixed(2));
+
+    for (let m = 0; m < 12; m++) {
+      balance = balance * (1 + r / 12) + monthly;
+    }
+  }
+
+  let realValue = balance / Math.pow(1 + inflation, years);
+
+  lastLabels = labels;
+  lastData = data;
+
+  lastResult =
+    "Startkapital: " + K0.toFixed(2) + " CHF\n" +
+    "Zinssatz: " + (r * 100).toFixed(2) + " %\n" +
+    "Laufzeit: " + years + " Jahre\n" +
+    "Monatliche Einzahlung: " + monthly.toFixed(2) + " CHF\n" +
+    "Inflation: " + (inflation * 100).toFixed(2) + " %\n\n" +
+    "Endkapital (nominal): " + balance.toFixed(2) + " CHF\n" +
+    "Endkapital (real): " + realValue.toFixed(2) + " CHF";
+
+  document.getElementById("ergebnis").innerText = lastResult;
+
+  drawChart(labels, data);
+}
+
+function drawChart(labels, data) {
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("chart"), {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Vermögen (CHF)",
+        data: data,
+        borderColor: "#667eea",
+        backgroundColor: "rgba(102,126,234,0.2)",
+        tension: 0.3
+      }]
+    }
+  });
+}
+
+function toggleDark() {
+  document.body.classList.toggle("dark");
+}
+
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  const now = new Date();
+  const timestamp = now.toLocaleString();
+
+  doc.setFontSize(9);
+  doc.text(timestamp, 200, 10, { align: "right" });
+
+  doc.setFontSize(16);
+  doc.text("Zinseszins Report", 10, 20);
+
+  doc.setFontSize(11);
+
+  let lines = lastResult.split("\n");
+  let y = 35;
+
+  lines.forEach(line => {
+    doc.text(line, 10, y);
+    y += 7;
+  });
+
+  if (chart) {
+    const imgData = document.getElementById("chart").toDataURL("image/png");
+    doc.addImage(imgData, "PNG", 10, y + 5, 180, 90);
+  }
+
+  doc.save("zinseszins_report.pdf");
+}
+</script>
+
+<!-- 📦 PWA Service Worker -->
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>
